@@ -951,7 +951,11 @@ window.addEventListener("touchstart", (ereignis) =>{
         meinSpiel.start();
     }
 })
-
+window.addEventListener("mousedown", (ereignis) =>{
+    if (!meinSpiel.laeuft) {
+        meinSpiel.start();
+    }
+})
 let meinSpiel = new Videospiel(); 
 meinSpiel.start();
 </script>
