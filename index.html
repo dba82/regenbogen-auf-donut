@@ -8,6 +8,12 @@
             padding: 0;
             margin: 0;
         }
+        html, body {
+            overflow-x: hidden;
+        }
+        body {
+            position: relative;
+        }
         html{
             cursor: crosshair;
             background-color: black;;
@@ -936,6 +942,12 @@ window.addEventListener("touchmove", mausUndTouch);
 
 window.addEventListener("keydown", (ereignis) =>{
     if (ereignis.key === "s") {
+        meinSpiel.start();
+    }
+})
+
+window.addEventListener("touchstart", (ereignis) =>{
+    if (!meinSpiel.laeuft) {
         meinSpiel.start();
     }
 })
