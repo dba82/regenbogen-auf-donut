@@ -913,8 +913,14 @@ class Videospiel extends SenderEmpfaenger{
         schleife();
     }
 };
-window.addEventListener("mousemove", (ereignis) =>{
-    let maus = new Koordinatenpaar(ereignis.pageX, ereignis.pageY);
+
+const mausUndTouch = (ereignis) =>{
+    let maus;
+    if (ereignis.touches){
+        maus = new Koordinatenpaar(ereignis.touches[0].pageX, ereignis.touches[0].pageY);
+    } else {
+        maus = new Koordinatenpaar(ereignis.pageX, ereignis.pageY);
+    }
     let spieler = meinSpiel.welt.spielfigur.position;//new Koordinatenpaar(leinwand.width/2, leinwand.height/2)//
     let minusSpieler = spieler.malZahl(-1);
     let differenz = maus.plus(minusSpieler);
@@ -923,7 +929,10 @@ window.addEventListener("mousemove", (ereignis) =>{
     let richtung = differenz.malZahl(diffLaenge > 0 ? 1/diffLaenge : ursprung);
     richtung = richtung.malZahl(0.4);
     meinSpiel.mausrichtung = richtung;
-});
+}
+
+window.addEventListener("mousemove", mausUndTouch);
+window.addEventListener("touchmove", mausUndTouch);
 
 window.addEventListener("keydown", (ereignis) =>{
     if (ereignis.key === "s") {
