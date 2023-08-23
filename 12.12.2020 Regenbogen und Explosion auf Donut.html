@@ -1,0 +1,932 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        html{
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="leinwand"></canvas>
+<!--    <div style="position: absolute; top: 50%; right: 50%; color: white;">+</div>-->
+    <script>
+
+let haveEvents = 'ongamepadconnected' in window;
+let controllers = {};
+
+let c = 0;
+let updateStatus = () => {
+    c++;
+  if (!haveEvents) {
+    scangamepads();
+  }
+  Object.values(controllers).forEach( controller => {
+    controller.buttons.forEach( (button, buttonNumber) =>{
+      let gedrueckt = button === 1.0;
+      if (typeof(button) === "object") {
+        gedrueckt = button.pressed;
+      }
+      if (gedrueckt){
+        if (buttonNumber === 0 && !meinSpiel.laeuft) {
+            meinSpiel.start();
+            }
+
+          console.log(buttonNumber)
+      }
+    });
+    controller.axes.forEach( achsenwert => {
+      achsenwert.toFixed(4);
+    });
+  });
+  requestAnimationFrame(updateStatus);
+}
+
+let scangamepads = () => {
+  let gamepads = navigator.getGamepads ? [...navigator.getGamepads()] : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+  gamepads.forEach( gamepad => {
+    if (gamepad) {
+      if (gamepad.index in controllers) {
+        controllers[gamepad.index] = gamepad;
+      } else {
+        addgamepad(gamepad);
+      }
+    }
+  });
+}
+
+window.addEventListener("gamepadconnected", (e)=>{
+  controllers[e.gamepad.index] = e.gamepad;
+  requestAnimationFrame(updateStatus)
+});
+
+window.addEventListener("gamepaddisconnected", () => controllers[gamepad.index] = undefined);
+
+if (!haveEvents) {
+ setInterval(scangamepads, 500);
+}
+scangamepads();
+</script>
+
+
+<script>
+let leinwand = document.getElementById("leinwand");
+let maler = leinwand.getContext("2d");
+leinwand.width = window.innerWidth;
+leinwand.height = window.innerHeight;
+maler.font = "50px Georgia";
+let zeichneKreis = (x,y,radius,farbe)=>{
+    maler.fillStyle = farbe;
+    maler.beginPath();
+    maler.arc(x,y,radius,0,2*3.14);
+    maler.closePath();
+    maler.fill();
+}
+/*
+window.addEventListener("keydown", (ereignis)=>{
+    let beschleunigungswert = 1;
+    if (ereignis.key === "w"){
+        meinSpiel.welt.spielfigur.bewegen(0, -beschleunigungswert);
+        meinSpiel.tastenZaehler += 1;
+        console.log(meinSpiel.tastenZaehler);
+    }
+    if (ereignis.key === "s"){
+        meinSpiel.welt.spielfigur.bewegen(0, beschleunigungswert);
+        meinSpiel.tastenZaehler += 1;
+        console.log(meinSpiel.tastenZaehler);
+    }
+    if (ereignis.key === "a"){
+        meinSpiel.welt.spielfigur.bewegen(-beschleunigungswert, 0);
+        meinSpiel.tastenZaehler += 1;
+        console.log(meinSpiel.tastenZaehler);
+    }
+    if (ereignis.key === "d"){
+        meinSpiel.welt.spielfigur.bewegen(beschleunigungswert, 0);
+        meinSpiel.tastenZaehler += 1;
+        console.log(meinSpiel.tastenZaehler);
+    }
+});
+window.addEventListener("keyup", (ereignis)=>{
+    meinSpiel.welt.spielfigur.beschleunigung = new Koordinatenpaar(0,0);
+})*/
+let zahlen = (n)=>{
+    /*
+        Diese Funktion gibt ein Array mit den Zahlen von 0 bis n zurück.
+        Zum Beispiel zahlen(8) === [0,1,2,3,4,5,6,7,8]
+    */
+    let ergebnis = [];
+    for (let i=0; i<n; i++){
+        ergebnis.push(i);
+    }
+    return ergebnis;
+}
+let gleichVerteiltePunkteAufKreis = (mittelpunkt, radius, anzahlPunkte) =>{
+    /*
+        Diese Funktion gibt ein Array mit Koordinatenpaaren zurück, die den Punkten auf einem Kreis
+        entsprechen und auf dem Kreis den gleichen Abstand voneinander haben.
+        Zum Beispiel gibt gleichVerteiltePunkteAufKreis(new Koordinatenpaar(0,0), 100, 12) die Punkte der Zahlen
+        auf einer Uhr mit Mittelpunkt (0,0) und Radius 100 zurück.
+        Warum? Siehe Definition von Cosinus und Sinus.
+        Math.sin(n) ist der Sinus von n
+        Math.cos(n) ist der Cosinus von n
+        .map(F) gibt ein Array zurück, das jedes Element im ursprünglichen Array durch F(Element) ersetzt
+    */
+    return zahlen(anzahlPunkte).map(i => {
+            return new Koordinatenpaar(mittelpunkt.x + radius*Math.sin(i * 2*Math.PI/anzahlPunkte), mittelpunkt.y + radius * Math.cos(i * 2* Math.PI/anzahlPunkte));
+    });
+}
+let istZwischen = (x, a, b) =>{
+    /*
+        Diese Funktion gibt true zurück, wenn x zwischen a und b liegt und false sonst.
+    */
+
+    return x >= a && x <= b // "&&" bedeutet die Aussage links UND die Aussage rechts, die Gesamtaussage ist also nur wahr, wenn beide wahr sind
+}
+class Zufalls{
+    static zahl(mindestens, hoechstens){
+        /*
+        Math.random gibt eine Zufallszahl zwischen 0 und 1 zurück
+        ist die Zahl Null, gibt diese Funktion mindestens + 0 * (hoechstens - mindestens), also mindestens zurück
+        ist die Zahl eins, gibt diese Funktion mindestens + 1 * (hoechstens - mindestens) 
+            also mindestens + höchstens - mindestens, also höchstens zurück
+        */
+        return mindestens + Math.random() * (hoechstens - mindestens);
+    }
+    static ganzZahl(mindestens, hoechstens){
+        //Math.round rundet eine Dezimalzahl auf die nächste ganze Zahl
+        return Math.round(Zufalls.zahl(mindestens, hoechstens));
+    }
+    static wuerfel(anzahlSeiten){
+        /*
+            Die Wahrscheinlichkeit, dass bei einem Würfelwurf mit n Seiten, ein BESTIMMTE Zahl fällt
+            ist 1/n, das ist die gleiche Wahrscheinlichkeit wie die, dass eine Zufallszahl zwischen 0 und 1
+            kleiner als 1/n ist
+        */
+        return Math.random() < (1/anzahlSeiten);
+    }
+    static element(array){
+        /*
+            Diese Funktion gibt ein zufälliges Element aus einem übergebenem Array zurück
+            .length gibt die Länge eines Arrays zurück.
+            !! Achtung der letzte Index im Array ist immer eins kleiner als die Länge, weil
+            wir mit 0 beginnen zu zählen.
+        */
+        return array[Zufalls.ganzZahl(0, array.length-1)];
+    }
+    static farbe(ausser){
+        /*
+            Diese Funktion gibt eine zufällige Farbe aus dem Array "farben" zurück,
+                aber ohne die im Array "ausser" genannten Farben
+            [.....].filter(F) gibt ein Array zurück, in dem nur noch die Elemente
+            aus dem ursprünglichen enthalten sind, für die Funktion F true zurückgibt
+            [.....].includes(O) gibt true zurück, wenn O im Array enthalten ist, sonst false
+        */
+        let farben = ["red", "yellow", "green", "blue", "purple", "lightblue", "cyan", "magenta", "pink", "orange", "white", "black"]
+        farben = farben.filter(farbe => !ausser.includes(farbe));
+        return Zufalls.element(farben);
+    }   
+}
+class Koordinatenpaar{
+    /*
+        Hier stehen die sogenannten Instanzvariablen eines Objekts,
+        das sind Variablen, über die mittels des Objekts zugegriffen wird.
+    */
+    x;
+    y;
+
+    constructor(x,y){
+        /*
+            Die constructor-Funktion wird immer aufgerufen, wenn ein Objekt mit "new" erzeugt wird.
+            Mit "this" bezieht man sich auf das neue Objekt selbst.
+        */
+        this.x = x;
+        this.y = y;
+    }
+
+    plus(anderesKoordinatenpaar){
+        //addiert die x- und die y-Werte und macht aus den Summen ein neues Koordinatenpaar
+        return new Koordinatenpaar(this.x + anderesKoordinatenpaar.x, this.y + anderesKoordinatenpaar.y);
+    }
+
+    malZahl(zahl){
+        //multipliziert x- und y-Wert mit "zahl"
+        return new Koordinatenpaar(this.x * zahl, this.y * zahl);
+    }
+
+    abstand(andererPunkt){
+        /*
+        gibt den Abstand zwischen den Punkten zurück
+        Erklärung: Siehe Satz des Pythagoras und beachte, dass die x und y-Achse senkrecht zueinander stehen
+        */
+        return Math.sqrt((this.y - andererPunkt.y)**2 + (this.x - andererPunkt.x)**2);
+    }
+}
+class SenderEmpfaenger{
+    /*
+    Ein SenderEmpfaenger kann Nachrichten senden, um andere Objekte zu informieren, dass etwas passiert ist
+    Ein SenderEmpfaenger kann Nachrichten empfangen und darauf reagieren
+    */
+    ereignisse = new Map(); 
+    /*
+    eine Map ist eine Sammlung von sogenannten Schlüssel/Wert-Paaren. 
+    Zum Beispiel kann ich als Schlüssel einen Namen setzen und als Wert ein Datum und so eine Sammlung von Geburtstagen anlegen
+    Die Map kann dann über die Funktion .get("Heinz") nach dem Geburtstag von Heinz gefragte werden
+    */ 
+
+    fuegeEmpfaengerHinzu(ereignisname, callbackFunktion){
+        /*
+            Wenn die ereignisse-Map noch kein Objekt zum Schlüssel "ereignisname" enthält,
+            wird dieses Schlüsselwertpaar erzeugt mit der Funktion, .set(schlüssel, wert).
+            Der Schlüssel ist der Ereignisname, z.B. "verloren" und der Wert ist ein Array
+            mit einer Funktion die aufgerufen werden soll, wenn das Ereignis eintritt. (siehe else-Block)
+            Existiert der Ereignisname bereits als Schlüssel, gibt es dieses Array also schon, wird dem
+            Array nur eine weitere Funktion hinzugefügt (.push(O) fügt einem Array das Objekt O hinzu an hinterster Stelle).
+        */
+        if (this.ereignisse.get(ereignisname)){
+            this.ereignisse.get(ereignisname).push(callbackFunktion);
+        }
+        else {
+            this.ereignisse.set(ereignisname, [callbackFunktion]);
+        }
+    }
+    sende(ereignisname){
+        /*
+            Diese Funktion wird aufgerufen, wenn das Ereignis stattfindet.
+            Es werden dann alle zugehörigen Funktionen aufgerufen. (.forEach(F) führt die
+            Funktion F für jedes Element des Arrays aus, in unserem fall, eine Funktion, die
+            das Element, das ja selbst eine Funktion ist, aufruft)
+        */
+        this.ereignisse.get(ereignisname).forEach(callbackFunktion => callbackFunktion());
+    }
+}
+class Figur extends SenderEmpfaenger{
+    /*
+        Eine Figur erbt vom SenderEmpfänger (deutlich durch "extends SenderEmpaenger"),
+        das heißt, ein Figur-Objekt hat alle Eigenschaften eines SenderEmpfaengers
+        Eine Figur ist ein Objekt, das auf dem Bildschirm angezeigt werden kann,
+        bewegt werden kann, eine bestimmte Größe (Radius) und Farbe hat und einen 
+        bestimmten Widerstand bei der Beschleunigung bietet (Reibung)
+    */
+    position;
+    geschwindigkeit;
+    beschleunigung;
+    radius;
+    farbe;
+    reibung;
+
+    constructor(x,y,r, farbe){
+        super();
+        /*
+            "super()" ruft die Konstruktorfunktion der Superklasse auf,
+            das ist die Klasse, von der diese Klasse erbt, in diesem Fall "SenderEmpfaenger"
+            !! Wird eine Constructor-Funktion für eine Klasse, die von einer anderen erbt definiert,
+            muss erstere immer als allererstes super() aufrufen.
+        */
+        this.reibung = 1.02;
+        this.radius = r;
+        this.position = new Koordinatenpaar(x,y);
+        this.geschwindigkeit = new Koordinatenpaar(0,0);
+        this.beschleunigung = new Koordinatenpaar(0,0);
+        this.farbe = farbe;
+        this.schweif = [this.position];
+    }
+    passiert(andereFigur, abstand = 20){
+        /*
+            Diese Funktion gibt zurück ob die Figur eine andere Figur mit einem bestimmten Abstand passiert.
+            (true oder false)
+        */
+        return this.position.abstand(andereFigur.position) < this.radius + andereFigur.radius + abstand;
+    }
+
+    beruehrt(andereFigur){
+        /*
+            Diese Funktion gibt zurück ob die Figur eine andere Figur berührt,
+            sie also mit einem Abstand von 0 passiert.
+            (true oder false)
+        */
+        return this.passiert(andereFigur, 0);
+    }
+
+    bewegen(xRichtung, yRichtung, toroidal = true){
+        /*
+            Diese Funktion setzt die Beschleunigung in x-Richtung auf den Wert "xRichtung"
+            und analog für die y-Richtung.
+            "toroidal" bedeutet hier, dass wenn die leinwand zu den Seiten verlassen wird,
+            die Figur auf der anderen Seite der Leinwand wieder erscheint. Wird der Funktion 
+            kein dritter Wert übergeben, ist "toroidal" true.
+        */
+        this.beschleunigung = new Koordinatenpaar(xRichtung, yRichtung);
+
+        /*
+            Wenn "bewegen" aufgerufen wird, wird die Geschwindigkeit in beide Richtungen um einen Beschleunigungswert
+            erhöht.
+            Damit die Geschwindigkeit nicht unendlich groß werden kann, wird der übergebene
+            Beschleunigungwert mit dem Kehrwert der momentanen Geschwindigkeit (bzw. deren Betrag + 1)
+            multipliziert. Dieser Kehrwert ist umso kleiner, je größer die Geschwindigkeit ist, also wird
+            die Geschwindigkeit umso weniger erhöht, desto größer sie schon ist.
+        */
+        this.geschwindigkeit.x += this.beschleunigung.x * 1/(Math.abs(this.geschwindigkeit.x) + 1);
+        this.geschwindigkeit.y += this.beschleunigung.y * 1/(Math.abs(this.geschwindigkeit.y) + 1);
+        
+        /*
+            Die Geschwindigkeit wird jetzt nochmals reduziert und zwar um den Kehrwehrt des Reibungsfaktors.
+            Das heißt sie wird umso stärker reduziert, desto größer die Reibung ist.
+        */
+        this.geschwindigkeit = this.geschwindigkeit.malZahl(1/this.reibung)
+        
+        /*
+            Die neue Position ist dann die alte Position plus die Geschwindigkeit.
+            So wie, wenn ich mit einer GEschwindigkeit von 5km/h laufe und mich an Position 3km befinde,
+            ich eine Stunde später an Position 8km bin.
+            Nur das hier nicht pro Stunde, sondern pro Aufruf der "bewegen"-Funktion gerechnet wird und nicht in
+            km sondern in Pixel.
+        */
+        this.position = this.position.plus(this.geschwindigkeit);
+
+        /*
+            Falls die Bewegung toroidal sein soll, muss die Position jetzt noch entsprechend angepasst werden.
+        */
+        if (toroidal){
+            if (this.position.x > leinwand.width){
+                this.position.x -= leinwand.width; 
+            }
+            if (this.position.y > leinwand.height){
+                this.position.y -= leinwand.height; 
+            }
+            if (this.position.x < 0){
+                this.position.x += leinwand.width; 
+            }
+            if (this.position.y < 0){
+                this.position.y += leinwand.height; 
+            }
+        }
+    }
+    zeichne(){
+        zeichneKreis(this.position.x, this.position.y, this.radius, this.farbe);
+    }
+}  
+
+class GegnerFigur extends Figur{
+    /*
+        Eine GegnerFigur erbt von einer Figur, hat also alle deren Eigenschaften, insbesondere
+        auch alle Eigenschaften eines SenderEmpfaengers (das wird hier aber noch nicht genutzt).
+        Darüberhinaus, kann eine Gegnerfigur gezuendet werden, das ist sie, wenn "gezuendet" eine Zahl ist und größer Null.
+        Wenn sie gezuendet ist, wird die Farbe auf Rot gesetzt. Die Farbe der Explosion soll aber der Farbe der
+        Figur entsprechen, deshalb benötigen wir eine zweite Farbvariable, die "Explosionsfarbe".
+        Außerdem soll es verschiedene Typen von Gegnern geben (durchnummeriert von 0 bis 5).
+    */
+    gezuendet;
+    explosionsFarbe;
+    typ;
+
+    constructor(x,y,r, typ){
+        /*
+            Wieder muss die super()-Funkton aufgerufen werden, da "Figur" aber Argumente hat (x,y,r,farbe), müssen diese
+            beim Aufruf auch übergeben werden. Die Farbe soll vom Typ abhängen.
+        */
+        super(x,y,r, ["white", "cyan", "lightblue", "lightgreen", "pink", "yellow"][typ]);
+        this.typ = typ;
+        /*
+            Die Farbe der Explosion soll  der Farbe der Figur entsprechen.
+        */
+        this.explosionsFarbe = this.farbe;
+    }
+
+    update(){
+        /*
+            Die "update"-Funktion wird in jedem Zeitschritt des Spiels aufgerufen. Hier passiert nur etwas
+            wenn "gezuendet" einen Wert größer Null hat, dann wird dieser Wert um eins reduziert.
+        */
+        if (this.gezuendet > 0){
+            this.gezuendet -= 1;
+        }
+    }
+
+    zuenden(){
+        /*
+            Wird der Gegner gezuendet, wird seine Farbe auf Rot gesetzt, und er hat noch 120 Zeitschritte bis zum Explodieren.
+        */
+       if (this.gezuendet === undefined){
+            this.gezuendet = 120;
+            this.farbe = "red";
+       }
+    }
+    zeichne(){
+        /*
+            Das der Gegner gezündet ist, soll zusätzlich deutlich werden durch einen leichten weißen Schatten.
+        */
+        if (this.gezuendet > 0){
+            this.farbe = "hsl(0, 50%, " + (50 + ((120-this.gezuendet)/120)*50) + "%)";
+            maler.shadowBlur = 15;
+            maler.shadowColor = "white";
+        }
+        /*
+            Damit der Schatten deutlich zu sehen ist, muss öfters gezeichnet werden (bestimmt gibt es eine elegantere Methode, ich kenne sie nicht)
+        */
+        super.zeichne();
+        super.zeichne();
+        super.zeichne();
+        super.zeichne();
+        super.zeichne();
+        maler.shadowBlur = 0;
+    }
+}
+class Kugel extends Figur{
+    /*
+        Die Kugel sind zum fernzuenden, nach 100 Zeitschritten, sollen sie verschwinden.
+        Sie bewegen sich außerdem von allein mit einer bestimmten Beschleunigung in immer gleicher Richtung.
+    */
+    lebensdauer = 100;
+    eigenBeschleunigung;
+
+    update(){
+        this.lebensdauer -= 1;
+        /*
+            Die Kugeln bewegen sich nicht toroidal, da sich beim Testspiel gezeigt hat, dass 
+            das eher zu Verwirrung führt, zumindest bei mir.
+        */
+        this.bewegen(this.eigenBeschleunigung.x, this.eigenBeschleunigung.y, false);
+    }
+}
+class Spielerfigur extends Figur{
+    schweif;
+    schweifLaenge;
+    zeitZumFernzuenden = 0;
+    kugeln = [];
+    constructor(x,y,r, farbe, schweifLaenge){
+        super(x,y,r, farbe);
+        /*
+            Die Spielerfigur soll einen Schweif nach sich ziehen.
+            Der Schweif wird repräsentiert durch die vorherigen Positionen der Spielerfigur.
+            Er hat keinerlei Bedeutung, außer zu helfen, dass die Spielerfigur immer deutlich zu sehen ist,
+            deshalb wird nur in der Funktion "zeichnen" auf ihn Bezug genommen.
+            Er hat eine endliche Länge, siehe "zeichnen".
+        */
+        this.schweif = [this.position];
+        this.schweifLaenge = schweifLaenge;
+    }
+    fernzuender(){
+        this.zeitZumFernzuenden += 240;
+    }
+    update(){
+        if (this.zeitZumFernzuenden < 0){
+            this.zeitZumFernzuenden = 0;
+        }
+        if (this.zeitZumFernzuenden > 0){
+            this.zeitZumFernzuenden -= 1;
+            if (this.zeitZumFernzuenden % 10 === 0){
+                let neueKugel = new Kugel(this.position.x, this.position.y, 2, "white");
+                neueKugel.eigenBeschleunigung = this.geschwindigkeit.malZahl(2);
+                this.kugeln.push(neueKugel);
+            }
+        }
+        if (Math.abs(this.geschwindigkeit.x)  < 0.1 && Math.abs(this.geschwindigkeit.y) < 0.1){
+               this.radius += 0.1;
+        }
+        this.kugeln = this.kugeln.filter(kugel => kugel.lebensdauer > 0);
+        this.kugeln.forEach(kugel => kugel.update())
+    }
+    zeichne(){
+        /*
+            Die Spielerfigur muss immer deutlich erkennbar sein, deshalb bekommt sie einen weißen Schimmer
+            zusätzlich zum Schweif.
+        */
+        maler.shadowBlur = 0;//15;
+        maler.shadowColor = "white";
+        zeichneKreis(this.position.x, this.position.y, this.radius, this.farbe);
+        this.schweif.forEach((punkt, index)=>{
+            /*
+                Die einzelnen Kreise des Schweifs werden gezeichnet, sie werden immer kleiner, je weiter hinten
+                im Array sie sich befinden. Und die Farbe hängt ebenfalls von ihrer Position im Array ab.
+            */
+            zeichneKreis(punkt.x, punkt.y, (this.schweif.length - index)*this.radius/this.schweifLaenge, "hsla(" + Math.round(index * 360/this.schweifLaenge) + ",100%, 50%, "+ ((this.schweifLaenge - index)/this.schweifLaenge) + ")")
+        });
+        this.kugeln.forEach(kugel => kugel.zeichne());
+        maler.shadowBlur = 0;
+    }
+    bewegen(x,y){
+        /*
+            Die "bewegen"-Funktion ruft die "Bewegen"-Funktion von Figur auf.
+            Zusätzlich wird die aktuelle Position vorne ins Schweif-Array hinzugefügt (.unshift(O) fügt
+            ein Objekt am Anfang des Arrays hinzu).
+            Dann wird das Objekt auf die Länge der Schweiflänge gekürzt (.slice(n,m) gibt ein Array zurück
+            dass die Elemente des ursprünglichen Arrays enthält, aber nur die ab n und bis ausschließlich m)
+        */
+        super.bewegen(x,y);
+        this.schweif.unshift(this.position);
+        this.schweif = this.schweif.slice(0,this.schweifLaenge);
+    }
+}
+class Superstern extends Figur{
+    außenPunkte;
+    innenPunkte;
+    anzahlZacken;
+    lebensdauer = Number.POSITIVE_INFINITY;
+
+    constructor(x,y,r,farbe, anzahlZacken){
+        super(x,y,r,farbe);
+        this.anzahlZacken = anzahlZacken;
+    }
+    zeichne(){
+        /*
+            So zeichnet man einen Stern, wer es nicht glaubt, probiert es mit Stift und Papier aus.
+            (siehe sechste Klasse "Winkel mit dem Geodreieck zeichnen")
+        */
+        this.innenPunkte = gleichVerteiltePunkteAufKreis(this.position, this.radius, this.anzahlZacken);
+        this.außenPunkte = gleichVerteiltePunkteAufKreis(this.position, this.radius/2, 2 * this.anzahlZacken);;
+        maler.beginPath();
+        maler.moveTo(this.innenPunkte[0].x, this.innenPunkte[0].y)
+        this.innenPunkte.forEach((punkt, index) => {
+            maler.lineTo(punkt.x, punkt.y);
+            let naechsterPunkt = this.außenPunkte[((index * 2)+1)%this.außenPunkte.length];
+            maler.lineTo(naechsterPunkt.x, naechsterPunkt.y)
+        })
+        maler.closePath();
+        maler.fillStyle = this.farbe;
+        maler.fill();
+    }
+    update(){}
+}
+class Explosion{
+    farbe;
+    position;
+    groesse;
+    stufe = 0;
+    vorbei = false;
+
+    constructor(f,p,g){
+        this.farbe = f;
+        this.position = p;
+        this.groesse = g;
+    }
+    update(){
+        /*
+            Mit jeder Stufe wächst die Explosion bis zu ihrer "groesse", dann verschwindet sie (darum kümmert sich die Welt, in der sie explodiert).
+        */
+        this.radius = this.stufe * 10 + 3;
+        this.stufe += 1;
+        if (this.stufe >= this.groesse) {
+            this.vorbei = true;
+        }
+    }
+    zeichne(){
+        if (!this.vorbei){
+            zahlen(this.stufe).forEach(j =>{
+                gleichVerteiltePunkteAufKreis(this.position, j * 10, 32)
+                    .forEach(punkt => zeichneKreis(punkt.x, punkt.y, 3, this.farbe));
+            });
+        }
+    }
+}
+class Level{
+    anzahlGegner;
+    gegnerTypen;
+    maximaleGegnergroesse;
+    minimaleGegnergroesse;
+    maximaleAnzahlSterne;
+    gegnerWackelnX;
+    gegnerWackelnY;
+    sternWahrscheinlichkeit;
+    reibung;
+
+    static from(object){
+        return new Level(
+            objekt.anzahlGegner, 
+            objekt.gegnerTypen, 
+            objekt.maximaleGegnergroesse, 
+            objekt.minimaleGegnergroesse, 
+            objekt.maximaleAnzahlSterne, 
+            objekt.gegnerWackelnX, 
+            objekt.gegnerWackelnY, 
+            objekt.sternWahrscheinlichkeit, 
+            objekt.reibung
+        )
+    }
+
+    constructor(anzahlGegner, gegnerTypen, maximaleGegnergroesse, minimaleGegnergroesse, maximaleAnzahlSterne, gegnerWackelnX, gegnerWackelnY, sternWahrscheinlichkeit, reibung){
+        this.anzahlGegner = anzahlGegner;
+        this.gegnerTypen = gegnerTypen;
+        this.maximaleGegnergroesse = maximaleGegnergroesse;
+        this.minimaleGegnergroesse = minimaleGegnergroesse;
+        this.maximaleAnzahlSterne = maximaleAnzahlSterne;
+        this.gegnerWackelnX = gegnerWackelnX;
+        this.gegnerWackelnY = gegnerWackelnY;
+        this.sternWahrscheinlichkeit = sternWahrscheinlichkeit;
+        this.reibung = reibung;
+    }
+}
+class Welt extends SenderEmpfaenger{
+    /*
+        Die Figuren befinden sich in einer Welt.
+        Die auch ein SenderEmpfaenger ist, damit sie dem Videospiel sagen kann, wenn wir verloren haben.
+    */
+
+    gegner = [];
+    explosionen = [];
+    supersterne = [];
+    spielfigur;
+    bildnummer = 0;
+    maximaleGegnergroesse = 5;
+    minimaleGegnergroesse = 5;
+    anzahlFertigerExplosionen = 0;
+    maximaleAnzahlSterne = 1;
+    gegnerWackelnX = 0.3;
+    anzahlGegner = 50;
+    gegnerWackelnY = 0.3;
+    sternWahrscheinlichkeit = 0.001;
+    reibung = 1.02;
+
+    constructor(level){
+        super();
+        /*
+            Die folgende Zeile bedeutet: Nehme jeden Namen der Eigenschaften/Instanzvariablen von "level" einzeln, 
+            und mache folgendes damit, wobei p dem aktuell behandelten Namen einer Eigenschaft entspricht.
+        */
+        for (let p in level){ 
+            /*
+                Die folgende Zeile bedeutet: Setze die Eigenschaft von diesem Objekt mit dem Namen, auf den ich mich mit p
+                beziehe und setze den Wert dieser Eigenschaft auf den Wert der Eigenschaft von "level", die den gleichen Namen hat.
+                Beispiel: this["maximaleGegnergroesse"] = level["maximaleGegnergroesse"], das bedeutet das gleiche wie:
+                this.maximaleGegnergroesse = level.maximaleGegnergroesse
+            */
+            this[p] = level[p];
+        }
+        this.spielfigur = new Spielerfigur(100,100,8, "orange", 100);
+        this.spielfigur.reibung = this.reibung;
+        let gegnerStartXWert = 400;
+        /*
+            Erzeuge "this.anzahlGegner" Gegner zufällig verteilt, aber mit einer x-Position von mindestens "gegnerStartXWert", hier 400.
+        */
+        this.gegner = zahlen(this.anzahlGegner).map(zahl => new GegnerFigur(Zufalls.zahl(gegnerStartXWert, leinwand.width - gegnerStartXWert), Zufalls.zahl(0, leinwand.height), Zufalls.zahl(this.minimaleGegnergroesse, this.maximaleGegnergroesse) , Zufalls.element(level.gegnerTypen)));
+    }
+
+    erzeugeSuperstern(){
+        /*
+            Erzeuge einen Superstern an zufälliger Position aber in einem Rechteck mit der Höhe der Leinwand, 
+            der Breite der Hälfte der Leinwand und beginnend ab dem ersten Viertel der Leinwand.
+        */
+        this.supersterne.push(new Superstern(Zufalls.zahl(leinwand.width * 0.25, leinwand.width * 0.75), Zufalls.zahl(0, leinwand.height), 10, "yellow", 5 ))
+    }
+
+    update(){
+        /*
+            Entferne alle Explosionen, die explodiert sind und alle Supersterne, die benutzt wurden.
+        */
+        this.explosionen = this.explosionen.filter(fw => !fw.vorbei);
+        this.supersterne = this.supersterne.filter(stern => stern.lebensdauer > 0)
+        
+        /*
+            Jeder Gegner, dessen countdown abgelaufen ist wird durch eine Explosion ersetzt
+            und die Anzahl der fertigen Explosionen wird erhöht.
+        */
+        this.gegner.filter(gegner => gegner.gezuendet === 0)
+                   .forEach((explodierenderGegner) => {
+                        this.explosionen.push(new Explosion(explodierenderGegner.explosionsFarbe, explodierenderGegner.position, Math.round(explodierenderGegner.radius)*2.5));
+                        /*
+                            .splice(n,m,O) entfernt aus dem Array alle m Elemente ab dem Index n und ersetzt sie durch das Objekt O.
+                            Wird O ausgelassen, entfernt sie nur.
+                            !! Achtung das Array selbst wird verändert!
+                        */
+                        this.gegner.splice(this.gegner.indexOf(explodierenderGegner), 1);
+                        this.anzahlFertigerExplosionen += 1;
+        });
+
+        if (this.gegner.length === 0 && this.explosionen.length === 0){
+            this.sende("gewonnen");
+        }
+        if (this.supersterne.length < this.maximaleAnzahlSterne && Zufalls.wuerfel(1/this.sternWahrscheinlichkeit)){
+            this.erzeugeSuperstern();
+        }
+
+        this.spielfigur.update();        
+        this.spielfigur.bewegen(0,0);
+        
+        this.gegner.forEach(gegner => {
+            gegner.update();
+            /*
+                Die Gegner sollen leicht in der X-Richtung wackeln und in der y-Richtung geradlinig nach unten wandern.
+            */
+            gegner.bewegen(Zufalls.zahl(-this.gegnerWackelnX, this.gegnerWackelnX), 0.1)
+        });
+        this.supersterne.forEach(stern => {
+            stern.update();
+            /*
+                Die Supersterne wackeln in alle Richtungen.
+            */
+            stern.bewegen(Zufalls.zahl(-this.gegnerWackelnX, this.gegnerWackelnX), Zufalls.zahl(-this.gegnerWackelnY, this.gegnerWackelnY))
+        });
+        this.explosionen.forEach(explosion => explosion.update());
+        /*
+            Die Bildnummer zählt die Zeit, also die bsiher gezeichneten Bilder (Frames).
+        */
+        this.bildnummer += 1;
+    }
+
+    interagieren(){
+        /*
+            Hier wird definiert wie die verschiedenen Arten von Objekten interagieren 
+        */
+
+        this.gegner.forEach((gegner)=>{
+            if (this.spielfigur.passiert(gegner, 30 - 2 * gegner.typ)){
+                gegner.zuenden();
+                /*
+                    Wenn ein Gegner durch Passieren gezuendet wurde, soll zur Belohnung außerdem die
+                    Spielfigur verkelinert werden, falls ihr Radius größer ist als 5 Pixel
+                */
+                if (this.spielfigur.radius > 5) {
+                    this.spielfigur.radius -= 0.1;
+                }
+            }
+        });
+        this.explosionen.forEach( explosion =>{
+           this.gegner.forEach( gegner => {
+               if (gegner.beruehrt(explosion)){
+                   gegner.zuenden();
+               }
+           })
+       })
+        this.supersterne.forEach(stern => {
+            /*
+                Wird ein Superstern berührt, wird der Fernzuender der Spielfigur aktiviert.
+                Der Superstern verschwindet.
+            */
+            if( this.spielfigur.beruehrt(stern)){
+                this.spielfigur.fernzuender();
+                stern.lebensdauer = 0;
+            }
+        });
+        /*
+            Berührt eine Kugel einen Gegner, wird der Gegner gezündet.
+            Die Kugel verschwindet.
+        */
+        this.spielfigur.kugeln.forEach( kugel => {
+            this.gegner.forEach( gegner => {
+                if (kugel.beruehrt(gegner)){
+                    gegner.zuenden();
+                    kugel.lebensdauer = 0;
+                }
+            })
+        });
+        /*
+            2 neue Symbole in den nächsten Zeilen:
+            1. .some(F) gibt true zurück, wenn es ein oder mehrere Elemente im Array gibt, für die F true zurück gibt
+            2. "||" bedeutet das linke oder das rechte ist wahr oder beide
+
+            Wir haben verloren, wenn unsere Spielfigur irgendeinen Gegner oder irgendeine Explosion berührt.
+        */
+        if (this.gegner.some(figur => this.spielfigur.beruehrt(figur)) || 
+            this.explosionen.some(explosion=> this.spielfigur.beruehrt(explosion))){
+            this.sende("verloren");
+        }
+    }
+    zeichne(){
+        maler.fillStyle = "black";
+        maler.fillRect(0,0,leinwand.width, leinwand.height);
+        this.spielfigur.zeichne();
+        this.gegner.forEach(figur => figur.zeichne());
+        this.explosionen.forEach(fw => fw.zeichne());
+        this.supersterne.forEach(stern => stern.zeichne());
+    }
+}
+class Anzeige{
+    text;
+    position;
+    breite;
+    farbe;
+
+    constructor(t, p, b, f){
+        this.position = p;
+        this.breite = b;
+        this.text = t;
+        this.farbe = f;
+    }
+
+    zeichne(){
+        maler.fillStyle = this.farbe;
+        maler.fillText(this.text, this.position.x, this.position.y, this.breite)
+    }
+
+}
+class Videospiel extends SenderEmpfaenger{
+    versuche = 0;
+    welt;
+    mausSteuerung = true;
+    mausrichtung = new Koordinatenpaar(0,0);
+    laeuft = false;
+    verlorenAnzeige;
+    aktuellerLevelIndex = 0;
+    levels = [
+        new Level(1, [0], 10, 10, 0, 0, 0, 0, 1.02), //1 Einstieg Prinzipien: nicht berühren, nah dran, weg von Explosion
+        new Level(3, [0,1], 5, 10, 0, 0, 0, 0, 1.02), //2 können mehrere Gegner sein
+        new Level(3, [0,1,2],5, 10, 0, 0.6, 0, 0, 1.02), //3 Gegner können sich seitlich bewegen
+        new Level(5, [0,1,2,3],5, 10, 0, 0.6, 0, 0, 1.02), //4 verschiedene Gegnertypen
+        new Level(15,[0,1,2,3,4], 5, 10, 4, 0.6, 0, 0.9, 1.02), //5 Supersterne zum Fernzuenden
+        new Level(15, [0,1,2,3,4], 4, 8, 2, 1.6, 0, 0.3, 1.02), //6 Gegner bewegen sich schneller zur Seite
+        new Level(15, [0,1,2,3,4], 4, 7, 3, 2, 2, 0.6, 1.02), //7 Gegner bewegen sich schneller zur Seite, Sterne bewegen sich in alle Richtungen
+        new Level(15, [0,1,2,3,4], 4, 7, 5, 2, 2, 0.6, 1.002), //8 Spielfigur bewegt sich schneller
+        new Level(20, [0,1,2,3,4,5], 4, 14, 2, 2, 2, 0.2, 1.002), //9 mehr Gegner zum Teil größer, wenig Sterne, Gegner in gleicher Farbe wie Sterne
+        new Level(10, [5], 10, 14, 2, 4, 4, 0.2, 1.002), //10 nur gelbe Gegner mit großem Sprengradius
+        new Level(40, [5], 4, 6, 2, 4, 4, 0.2, 1.002), //11 nur gelbe Gegner, viele, aber kleiner Sprengradius
+        new Level(50, [0], 6, 6, 0, 4, 4, 0.2, 1.002), //12 
+        new Level(180, [1], 4, 4, 0, 0, 0, 0, 1.002), //13
+        new Level(250, [5], 2, 2, 0, 0, 0, 0, 1.002), //14
+        new Level(100, [1], 2, 2, 0, 6, 0, 0, 1.002), //15
+        new Level(1, [5], 30, 30, 0, 0, 0, 0, 1.002), //16
+        new Level(1, [5], 30, 30, 0, 10, 0, 0, 1.0004), //17
+        new Level(2, [5], 30, 30, 80, 10, 0, 0.9, 1.0004), //18
+        new Level(20, [0,1,2,3,4], 8, 8, 80, 8, 0, 0.9, 1.0004), //19
+
+    ];
+    ladeLevel(){
+        this.laeuft = true;
+        this.welt = new Welt(this.levels[this.aktuellerLevelIndex]);
+        this.welt.fuegeEmpfaengerHinzu("verloren", ()=>{
+            this.laeuft = false;
+            this.verlorenAnzeige.text = this.welt.anzahlFertigerExplosionen + " Explosion";
+            if (this.welt.anzahlFertigerExplosionen !== 1){
+                this.verlorenAnzeige.text+= "en";
+            }
+            this.verlorenAnzeige.text += " in Level " + (this.aktuellerLevelIndex + 1);
+            this.verlorenAnzeige.zeichne();
+        });
+        this.welt.fuegeEmpfaengerHinzu("gewonnen", ()=>{
+            this.aktuellerLevelIndex += 1;
+            if (this.aktuellerLevelIndex >= this.levels.length){
+                this.laeuft = false;
+                window.alert("Glückwunsch und Gratulation, du hast das Spiel besiegt! Mit nur " + this.versuche + " Versuchen" )
+            }
+            else {
+                this.ladeLevel();
+            }
+        });
+    }
+    start(){
+        this.versuche += 1;
+        this.ladeLevel();
+        this.verlorenAnzeige = new Anzeige("", new Koordinatenpaar(leinwand.width/2, leinwand.height/2), leinwand.width/4, "red");
+
+        let beschleuningungsfaktor = 0.4;
+        let schleife = () => {
+            /*
+                Die Spielschleife:
+                1. Inputs erfassen
+            */
+            if (controllers[0]) {
+                this.welt.spielfigur.bewegen(
+                    ...controllers[0].axes.slice(0,2).map( x => beschleuningungsfaktor * x) // irgendeineFunktion(...[1,2,3]) ist das gleiche wie: irgendeineFunktion(1,2,3) ( "..." ist der sogenannte Spreadoperator)
+                );
+                this.mausSteuerung = false;
+            }
+            if (this.mausSteuerung){
+                this.welt.spielfigur.bewegen(this.mausrichtung.x, this.mausrichtung.y);
+            }
+            /*
+                2. Den Zustand der Welt updaten
+            */
+            this.welt.update();
+            /*
+                3. Kollisionsabfrage
+            */
+            this.welt.interagieren();
+            if (this.laeuft){
+                /*
+                4. Zeichnen
+                */
+                this.welt.zeichne();
+                /*
+                5. Von vorne beginnen
+                */
+                window.requestAnimationFrame(schleife);
+            }
+        }
+        /*
+            Die Spielschleife starten.
+        */
+        schleife();
+    }
+};
+window.addEventListener("mousemove", (ereignis) =>{
+    let maus = new Koordinatenpaar(ereignis.pageX, ereignis.pageY);
+    let spieler = meinSpiel.welt.spielfigur.position;//new Koordinatenpaar(leinwand.width/2, leinwand.height/2)//
+    let minusSpieler = spieler.malZahl(-1);
+    let differenz = maus.plus(minusSpieler);
+    let ursprung = new Koordinatenpaar(0,0);
+    let diffLaenge = differenz.abstand(ursprung);
+    let richtung = differenz.malZahl(diffLaenge > 0 ? 1/diffLaenge : ursprung);
+    richtung = richtung.malZahl(0.4);
+    meinSpiel.mausrichtung = richtung;
+});
+
+window.addEventListener("keydown", (ereignis) =>{
+    if (ereignis.key === "s") {
+        meinSpiel.start();
+    }
+})
+
+let meinSpiel = new Videospiel(); 
+meinSpiel.start();
+</script>
+</body>
+</html>
