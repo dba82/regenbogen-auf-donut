@@ -664,7 +664,7 @@ class Welt extends SenderEmpfaenger{
             */
             this[p] = level[p];
         }
-        this.spielfigur = new Spielerfigur(100,100,8, "orange", 100);
+        this.spielfigur = new Spielerfigur(100,100,8, "orange", 10000);
         this.spielfigur.reibung = this.reibung;
         let gegnerStartXWert = 400;
         /*
@@ -937,6 +937,12 @@ const mausUndTouch = (ereignis) =>{
     meinSpiel.mausrichtung = richtung;
 }
 
+const neustarten = (ereignis) =>{
+    if (!meinSpiel.laeuft) {
+        meinSpiel.start();
+    }
+}
+
 window.addEventListener("mousemove", mausUndTouch);
 window.addEventListener("touchmove", mausUndTouch);
 
@@ -946,16 +952,9 @@ window.addEventListener("keydown", (ereignis) =>{
     }
 })
 
-window.addEventListener("touchstart", (ereignis) =>{
-    if (!meinSpiel.laeuft) {
-        meinSpiel.start();
-    }
-})
-window.addEventListener("mousedown", (ereignis) =>{
-    if (!meinSpiel.laeuft) {
-        meinSpiel.start();
-    }
-})
+window.addEventListener("touchstart", neustarten);
+window.addEventListener("mousedown", neustarten);
+
 let meinSpiel = new Videospiel(); 
 meinSpiel.start();
 </script>
